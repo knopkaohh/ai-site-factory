@@ -3,7 +3,7 @@ import {
   NAME_MAX_LENGTH,
   PROJECT_MODE_LABELS,
   TEXT_MAX_LENGTH,
-  normalizeSourceDomain,
+  normalizeSourceTarget,
   validateProjectInput,
   type FieldError,
   type ProjectInput,
@@ -48,7 +48,7 @@ export function ProjectForm({
 }) {
   const [state, setState] = useState<FormState>({
     name: initial?.name ?? '',
-    sourceDomain: initial?.sourceDomain ?? '',
+    sourceDomain: initial?.sourceUrl || initial?.sourceDomain || '',
     brief: initial?.brief ?? '',
     requirements: initial?.requirements ?? '',
     mode: initial?.mode ?? '',
@@ -59,7 +59,7 @@ export function ProjectForm({
     if (!state.sourceDomain.trim()) {
       return null;
     }
-    return normalizeSourceDomain(state.sourceDomain);
+    return normalizeSourceTarget(state.sourceDomain);
   }, [state.sourceDomain]);
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -130,8 +130,8 @@ export function ProjectForm({
         />
         <p id="project-domain-hint" className="field-hint">
           {normalized?.ok
-            ? `Сохранится как ${normalized.domain}. Сайт сейчас не загружается.`
-            : 'Можно ввести адрес с протоколом или без него. Путь, порт и параметры не сохраняются.'}
+            ? `Стартовая страница: ${normalized.sourceUrl}. Сохранение проекта сайт не загружает.`
+            : 'Можно ввести адрес с протоколом или без него. Сохраняются домен и путь стартовой страницы. Сайт при этом не загружается.'}
         </p>
         {errorFor(errors, 'sourceDomain') ? <p className="field-error">{errorFor(errors, 'sourceDomain')}</p> : null}
       </div>

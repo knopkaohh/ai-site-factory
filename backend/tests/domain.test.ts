@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { STAGE_CATALOG, STAGE_KEYS, deriveCurrentStage, deriveProgress } from '../../shared/src/index';
-import { normalizeSourceDomain } from '../../shared/src/domain';
+import { normalizeSourceDomain, normalizeSourceTarget } from '../../shared/src/domain';
 import { validateProjectInput, validateProjectPatch } from '../../shared/src/validation';
 import { assertStageCoverage, AUTOMATION_CATALOG } from '../src/automation/registry';
 
@@ -44,6 +44,24 @@ describe('normalizeSourceDomain', () => {
   });
 });
 
+describe('normalizeSourceTarget', () => {
+  it('сохраняет путь стартовой страницы и отбрасывает порт с фрагментом', () => {
+    assert.deepEqual(normalizeSourceTarget('https://www.liderkarate.ru:443/framespages/index01.htm#top'), {
+      ok: true,
+      domain: 'www.liderkarate.ru',
+      sourceUrl: 'https://www.liderkarate.ru/framespages/index01.htm',
+    });
+  });
+
+  it('для домена без пути ставит корневой https-адрес', () => {
+    assert.deepEqual(normalizeSourceTarget('Shop.Example'), {
+      ok: true,
+      domain: 'shop.example',
+      sourceUrl: 'https://shop.example/',
+    });
+  });
+});
+
 describe('validateProjectInput', () => {
   const valid = {
     name: '  Кафе Север  ',
@@ -60,6 +78,7 @@ describe('validateProjectInput', () => {
       assert.deepEqual(result.value, {
         name: 'Кафе Север',
         sourceDomain: 'cafe.example',
+        sourceUrl: 'https://cafe.example/menu',
         brief: 'Обновить меню и витрину',
         requirements: null,
         mode: 'stage_approval',
@@ -127,10 +146,11 @@ describe('прогресс и покрытие этапов', () => {
     assert.equal(deriveCurrentStage(stages), 'analyze');
   });
 
-  it('связывает каждый этап ровно с одним сервисом и не помечает интеграции подключёнными', () => {
+  it('связывает каждый этап с одним сервисом и помечает подключённым только сбор', () => {
     assertStageCoverage();
     assert.equal(STAGE_KEYS.length, 7);
-    assert.ok(AUTOMATION_CATALOG.every((service) => service.state !== 'ok'));
+    assert.equal(AUTOMATION_CATALOG.find((service) => service.id === 'crawler')?.state, 'ok');
+    assert.ok(AUTOMATION_CATALOG.filter((service) => service.id !== 'crawler').every((service) => service.state !== 'ok'));
     assert.ok(AUTOMATION_CATALOG.some((service) => service.state === 'not_connected'));
     assert.ok(AUTOMATION_CATALOG.some((service) => service.state === 'in_development'));
   });

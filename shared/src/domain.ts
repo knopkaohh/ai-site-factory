@@ -99,6 +99,38 @@ export function normalizeSourceDomain(input: string): DomainResult {
   return { ok: true, domain };
 }
 
+export type SourceTargetResult =
+  | { ok: true; domain: string; sourceUrl: string }
+  | { ok: false; message: string };
+
+/** Домен и стартовый URL сбора. Путь сохраняется, фрагмент и порт отбрасываются. */
+export function normalizeSourceTarget(input: string): SourceTargetResult {
+  const domainResult = normalizeSourceDomain(input);
+  if (!domainResult.ok) {
+    return domainResult;
+  }
+  const trimmed = input.trim();
+  const withScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//u.test(trimmed) ? trimmed : `https://${trimmed}`;
+  let parsed: URL;
+  try {
+    parsed = new URL(withScheme);
+  } catch {
+    return { ok: false, message: 'Не удалось разобрать адрес сайта' };
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return { ok: false, message: 'Допустим адрес только с протоколом http или https' };
+  }
+  const asciiHost = new URL(`https://${domainResult.domain}`).hostname.toLowerCase();
+  if (parsed.hostname.toLowerCase() !== asciiHost || parsed.username || parsed.password) {
+    return { ok: false, message: 'Не удалось разобрать адрес сайта' };
+  }
+  return {
+    ok: true,
+    domain: domainResult.domain,
+    sourceUrl: `${parsed.protocol}//${asciiHost}${parsed.pathname || '/'}${parsed.search}`,
+  };
+}
+
 export function foldSearchText(value: string): string {
   return value.trim().toLocaleLowerCase('ru-RU');
 }

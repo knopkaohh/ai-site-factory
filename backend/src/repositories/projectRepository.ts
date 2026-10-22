@@ -1,5 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import {
+  deriveCurrentStage,
+  deriveProgress,
   isProjectMode,
   isProjectStatus,
   isStageKey,
@@ -7,12 +9,16 @@ import {
   type Project,
   type ProjectEvent,
   type ProjectStage,
+  type ProjectStatus,
+  type StageKey,
+  type StageStatus,
 } from '../../../shared/src/index';
 
 interface ProjectRow {
   id: string;
   name: string;
   source_domain: string;
+  source_url: string | null;
   brief: string;
   requirements: string | null;
   mode: string;
@@ -64,6 +70,7 @@ function mapProject(row: ProjectRow): Project {
     id: row.id,
     name: row.name,
     sourceDomain: row.source_domain,
+    sourceUrl: row.source_url?.trim() || `https://${row.source_domain}/`,
     brief: row.brief,
     requirements: row.requirements,
     mode: row.mode,
@@ -103,7 +110,7 @@ function mapEvent(row: EventRow): ProjectEvent {
 }
 
 const PROJECT_COLUMNS = `
-  id, name, source_domain, brief, requirements, mode, status,
+  id, name, source_domain, source_url, brief, requirements, mode, status,
   current_stage, progress, created_at, updated_at
 `;
 
@@ -196,6 +203,7 @@ export interface NewProjectRecord {
   name: string;
   nameFolded: string;
   sourceDomain: string;
+  sourceUrl: string;
   brief: string;
   requirements: string | null;
   mode: string;
@@ -211,9 +219,9 @@ export function insertProject(database: DatabaseSync, project: NewProjectRecord)
     .prepare(
       `
         INSERT INTO projects (
-          id, name, name_folded, source_domain, brief, requirements, mode, status,
+          id, name, name_folded, source_domain, source_url, brief, requirements, mode, status,
           current_stage, progress, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
     )
     .run(
@@ -221,6 +229,7 @@ export function insertProject(database: DatabaseSync, project: NewProjectRecord)
       project.name,
       project.nameFolded,
       project.sourceDomain,
+      project.sourceUrl,
       project.brief,
       project.requirements,
       project.mode,
@@ -274,6 +283,7 @@ export function updateProjectRow(
     name: string;
     nameFolded: string;
     sourceDomain: string;
+    sourceUrl: string;
     brief: string;
     requirements: string | null;
     mode: string;
@@ -284,7 +294,7 @@ export function updateProjectRow(
     .prepare(
       `
         UPDATE projects
-        SET name = ?, name_folded = ?, source_domain = ?, brief = ?, requirements = ?, mode = ?, updated_at = ?
+        SET name = ?, name_folded = ?, source_domain = ?, source_url = ?, brief = ?, requirements = ?, mode = ?, updated_at = ?
         WHERE id = ?
       `,
     )
@@ -292,6 +302,7 @@ export function updateProjectRow(
       project.name,
       project.nameFolded,
       project.sourceDomain,
+      project.sourceUrl,
       project.brief,
       project.requirements,
       project.mode,
@@ -303,6 +314,61 @@ export function updateProjectRow(
 export function deleteProject(database: DatabaseSync, id: string): number {
   const result = database.prepare('DELETE FROM projects WHERE id = ?').run(id);
   return Number(result.changes);
+}
+
+export function applyProjectStage(
+  database: DatabaseSync,
+  projectId: string,
+  stageKey: StageKey,
+  stage: {
+    status: StageStatus;
+    startedAt: string | null;
+    completedAt: string | null;
+    errorMessage: string | null;
+  },
+  projectStatus: ProjectStatus,
+  updatedAt: string,
+): void {
+  database
+    .prepare(
+      `
+        UPDATE project_stages
+        SET status = ?, started_at = ?, completed_at = ?, error_message = ?
+        WHERE project_id = ? AND stage_key = ?
+      `,
+    )
+    .run(stage.status, stage.startedAt, stage.completedAt, stage.errorMessage, projectId, stageKey);
+  const stages = listStages(database, projectId);
+  database
+    .prepare(
+      `
+        UPDATE projects
+        SET status = ?, progress = ?, current_stage = ?, updated_at = ?
+        WHERE id = ?
+      `,
+    )
+    .run(projectStatus, deriveProgress(stages), deriveCurrentStage(stages), updatedAt, projectId);
+}
+
+export function resetCollectStageIfRunning(database: DatabaseSync, projectId: string, updatedAt: string): boolean {
+  const result = database
+    .prepare(
+      `
+        UPDATE project_stages
+        SET status = 'pending', started_at = NULL, completed_at = NULL, error_message = NULL
+        WHERE project_id = ? AND stage_key = 'collect' AND status = 'in_progress'
+      `,
+    )
+    .run(projectId);
+  if (Number(result.changes) === 0) {
+    return false;
+  }
+  const stages = listStages(database, projectId);
+  const status: ProjectStatus = stages.every((stage) => stage.status === 'pending') ? 'created' : 'in_progress';
+  database
+    .prepare('UPDATE projects SET status = ?, progress = ?, current_stage = ?, updated_at = ? WHERE id = ?')
+    .run(status, deriveProgress(stages), deriveCurrentStage(stages), updatedAt, projectId);
+  return true;
 }
 
 export function countRelated(database: DatabaseSync, projectId: string): { stages: number; events: number } {

@@ -4,6 +4,14 @@ export {
   INTEGRATION_STATES,
   NAME_MAX_LENGTH,
   PLATFORM_VERSION,
+  CRAWL_LINK_RELATIONS,
+  CRAWL_PAGE_LIMIT_DEFAULT,
+  CRAWL_PAGE_LIMIT_MAX,
+  CRAWL_PAGE_LIMIT_MIN,
+  CRAWL_PAGE_STATUSES,
+  CRAWL_PAGE_STATUS_LABELS,
+  CRAWL_RUN_STATUSES,
+  CRAWL_RUN_STATUS_LABELS,
   PROJECT_EVENT_TYPES,
   PROJECT_MODE_LABELS,
   PROJECT_MODES,
@@ -15,6 +23,8 @@ export {
   STAGE_STATUSES,
   STAGE_STATUS_LABELS,
   TEXT_MAX_LENGTH,
+  isCrawlPageStatus,
+  isCrawlRunStatus,
   isProjectMode,
   isProjectStatus,
   isStageKey,
@@ -24,6 +34,9 @@ export {
 export type {
   AutomationServiceId,
   IntegrationState,
+  CrawlLinkRelation,
+  CrawlPageStatus,
+  CrawlRunStatus,
   ProjectEventType,
   ProjectMode,
   ProjectStatus,
@@ -31,12 +44,19 @@ export type {
   StageKey,
   StageStatus,
 } from './constants';
-export { foldSearchText, normalizeSourceDomain } from './domain';
-export type { DomainResult } from './domain';
+export { foldSearchText, normalizeSourceDomain, normalizeSourceTarget } from './domain';
+export type { DomainResult, SourceTargetResult } from './domain';
 export { deriveCurrentStage, deriveProgress } from './progress';
 export type { StageProgressInput } from './progress';
 export type {
   ApiErrorBody,
+  CrawlImage,
+  CrawlLink,
+  CrawlPageDetail,
+  CrawlPageSummary,
+  CrawlRun,
+  CrawlSettings,
+  CrawlSummary,
   HealthReport,
   IntegrationStatus,
   Project,
@@ -46,5 +66,5 @@ export type {
   ProjectStage,
   ProjectSummary,
 } from './types';
-export { PROJECT_MODE_OPTIONS, validateProjectInput, validateProjectPatch } from './validation';
-export type { FieldError, ProjectInput, ProjectPatch, ValidationResult } from './validation';
+export { PROJECT_MODE_OPTIONS, validateCrawlSettingsPatch, validateProjectInput, validateProjectPatch } from './validation';
+export type { CrawlSettingsInput, FieldError, ProjectInput, ProjectPatch, ValidationResult } from './validation';

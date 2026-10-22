@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { rmSync } from 'node:fs';
 import type { DatabaseSync } from 'node:sqlite';
 import {
   PROJECT_EVENT_TYPES,
@@ -13,6 +14,8 @@ import {
   type ProjectPatch,
   type ProjectStatus,
 } from '../../../shared/src/index';
+import { crawlProjectDirectory } from '../crawl/storage';
+import { crawlRuntime } from '../crawl/runtime';
 import { likeContains, withTransaction } from '../db/database';
 import {
   countRelated,
@@ -31,6 +34,7 @@ import {
 const FIELD_LABELS: Record<keyof ProjectInput, string> = {
   name: 'название',
   sourceDomain: 'исходный домен',
+  sourceUrl: 'исходный адрес',
   brief: 'краткое техническое задание',
   requirements: 'особые требования',
   mode: 'режим работы',
@@ -81,6 +85,7 @@ export function createProject(database: DatabaseSync, input: ProjectInput): Proj
       name: input.name,
       nameFolded: foldSearchText(input.name),
       sourceDomain: input.sourceDomain,
+      sourceUrl: input.sourceUrl,
       brief: input.brief,
       requirements: input.requirements,
       mode: input.mode,
@@ -107,7 +112,7 @@ export function createProject(database: DatabaseSync, input: ProjectInput): Proj
       id: randomUUID(),
       projectId: id,
       eventType: PROJECT_EVENT_TYPES.created,
-      message: `Проект создан. Исходный домен: ${input.sourceDomain}. Режим: ${PROJECT_MODE_LABELS[input.mode]}.`,
+      message: `Проект создан. Исходный адрес: ${input.sourceUrl}. Режим: ${PROJECT_MODE_LABELS[input.mode]}.`,
       createdAt: now,
     });
 
@@ -126,6 +131,13 @@ function changedFields(current: ProjectInput, patch: ProjectPatch): (keyof Proje
   }
   if (patch.sourceDomain !== undefined && patch.sourceDomain !== current.sourceDomain) {
     fields.push('sourceDomain');
+  }
+  if (
+    patch.sourceUrl !== undefined &&
+    patch.sourceUrl !== current.sourceUrl &&
+    !fields.includes('sourceDomain')
+  ) {
+    fields.push('sourceUrl');
   }
   if (patch.brief !== undefined && patch.brief !== current.brief) {
     fields.push('brief');
@@ -153,6 +165,7 @@ export function updateProject(
     {
       name: current.name,
       sourceDomain: current.sourceDomain,
+      sourceUrl: current.sourceUrl,
       brief: current.brief,
       requirements: current.requirements,
       mode: current.mode,
@@ -169,6 +182,7 @@ export function updateProject(
     const next = {
       name: patch.name ?? current.name,
       sourceDomain: patch.sourceDomain ?? current.sourceDomain,
+      sourceUrl: patch.sourceUrl ?? current.sourceUrl,
       brief: patch.brief ?? current.brief,
       requirements: patch.requirements === undefined ? current.requirements : patch.requirements,
       mode: patch.mode ?? current.mode,
@@ -178,6 +192,7 @@ export function updateProject(
       name: next.name,
       nameFolded: foldSearchText(next.name),
       sourceDomain: next.sourceDomain,
+      sourceUrl: next.sourceUrl,
       brief: next.brief,
       requirements: next.requirements,
       mode: next.mode,
@@ -203,7 +218,7 @@ export function updateProject(
 }
 
 export function removeProject(database: DatabaseSync, id: string): boolean {
-  return withTransaction(database, () => {
+  const removed = withTransaction(database, () => {
     const current = findProject(database, id);
     if (!current) {
       return false;
@@ -211,6 +226,18 @@ export function removeProject(database: DatabaseSync, id: string): boolean {
     const changes = deleteProject(database, id);
     return changes > 0;
   });
+  if (removed) {
+    removeProjectFiles(id);
+  }
+  return removed;
+}
+
+export function removeProjectFiles(projectId: string): void {
+  try {
+    rmSync(crawlProjectDirectory(crawlRuntime().storageRoot, projectId), { recursive: true, force: true });
+  } catch (error) {
+    console.error('Не удалось удалить файлы сбора', error);
+  }
 }
 
 export function relatedCounts(database: DatabaseSync, projectId: string) {

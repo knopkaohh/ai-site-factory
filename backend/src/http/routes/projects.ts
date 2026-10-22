@@ -14,6 +14,7 @@ import {
   updateProject,
 } from '../../services/projectService';
 import { HttpError, asyncHandler } from '../errors';
+import { createCrawlRouter } from './crawls';
 
 const PROJECT_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -33,6 +34,8 @@ function readQueryValue(value: unknown, field: string): string | undefined {
 
 export function createProjectRouter(database: DatabaseSync): Router {
   const router = Router();
+
+  router.use('/:id/crawls', createCrawlRouter(database));
 
   router.get(
     '/',

@@ -1,4 +1,4 @@
-export const PLATFORM_VERSION = '0.1.0';
+export const PLATFORM_VERSION = '0.2.0';
 
 export const PROJECT_MODES = ['autopilot', 'stage_approval'] as const;
 export type ProjectMode = (typeof PROJECT_MODES)[number];
@@ -65,7 +65,54 @@ export const STAGE_CATALOG: readonly StageDefinition[] = [
 export const PROJECT_EVENT_TYPES = {
   created: 'project.created',
   updated: 'project.updated',
+  crawlStarted: 'crawl.started',
+  crawlFinished: 'crawl.finished',
+  crawlFailed: 'crawl.failed',
+  crawlCancelled: 'crawl.cancelled',
 } as const;
+
+export const CRAWL_RUN_STATUSES = [
+  'queued',
+  'running',
+  'completed',
+  'completed_with_errors',
+  'failed',
+  'cancelled',
+] as const;
+export type CrawlRunStatus = (typeof CRAWL_RUN_STATUSES)[number];
+
+export const CRAWL_PAGE_STATUSES = ['fetched', 'skipped', 'error'] as const;
+export type CrawlPageStatus = (typeof CRAWL_PAGE_STATUSES)[number];
+
+export const CRAWL_LINK_RELATIONS = ['internal', 'external', 'skipped'] as const;
+export type CrawlLinkRelation = (typeof CRAWL_LINK_RELATIONS)[number];
+
+export const CRAWL_PAGE_LIMIT_DEFAULT = 100;
+export const CRAWL_PAGE_LIMIT_MIN = 1;
+export const CRAWL_PAGE_LIMIT_MAX = 200;
+
+export const CRAWL_RUN_STATUS_LABELS: Record<CrawlRunStatus, string> = {
+  queued: 'В очереди',
+  running: 'Выполняется',
+  completed: 'Завершён',
+  completed_with_errors: 'Завершён с ошибками',
+  failed: 'Не выполнен',
+  cancelled: 'Отменён',
+};
+
+export const CRAWL_PAGE_STATUS_LABELS: Record<CrawlPageStatus, string> = {
+  fetched: 'Собрана',
+  skipped: 'Пропущена',
+  error: 'Ошибка',
+};
+
+export function isCrawlRunStatus(value: unknown): value is CrawlRunStatus {
+  return typeof value === 'string' && CRAWL_RUN_STATUSES.includes(value as CrawlRunStatus);
+}
+
+export function isCrawlPageStatus(value: unknown): value is CrawlPageStatus {
+  return typeof value === 'string' && CRAWL_PAGE_STATUSES.includes(value as CrawlPageStatus);
+}
 export type ProjectEventType = (typeof PROJECT_EVENT_TYPES)[keyof typeof PROJECT_EVENT_TYPES];
 
 export const PROJECT_MODE_LABELS: Record<ProjectMode, string> = {

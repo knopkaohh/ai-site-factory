@@ -1,4 +1,19 @@
-import type { ApiErrorBody, FieldError, HealthReport, ProjectDetail, ProjectInput, ProjectList, ProjectPatch, ProjectStatus } from '../shared';
+import type {
+  ApiErrorBody,
+  CrawlPageDetail,
+  CrawlPageStatus,
+  CrawlPageSummary,
+  CrawlRun,
+  CrawlSettings,
+  CrawlSummary,
+  FieldError,
+  HealthReport,
+  ProjectDetail,
+  ProjectInput,
+  ProjectList,
+  ProjectPatch,
+  ProjectStatus,
+} from '../shared';
 
 export class ApiRequestError extends Error {
   readonly status: number;
@@ -88,7 +103,13 @@ export function listProjects(params: { query?: string; status?: ProjectStatus },
 export function createProject(input: ProjectInput): Promise<ProjectDetail> {
   return apiRequest<ProjectDetail>('/api/projects', {
     method: 'POST',
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      name: input.name,
+      sourceDomain: input.sourceUrl,
+      brief: input.brief,
+      requirements: input.requirements,
+      mode: input.mode,
+    }),
   });
 }
 
@@ -97,14 +118,84 @@ export function getProject(id: string, signal?: AbortSignal): Promise<ProjectDet
 }
 
 export function updateProject(id: string, patch: ProjectPatch): Promise<ProjectDetail> {
+  const body: Record<string, unknown> = {};
+  if (patch.name !== undefined) {
+    body.name = patch.name;
+  }
+  if (patch.sourceUrl !== undefined) {
+    body.sourceDomain = patch.sourceUrl;
+  } else if (patch.sourceDomain !== undefined) {
+    body.sourceDomain = patch.sourceDomain;
+  }
+  if (patch.brief !== undefined) {
+    body.brief = patch.brief;
+  }
+  if (patch.requirements !== undefined) {
+    body.requirements = patch.requirements;
+  }
+  if (patch.mode !== undefined) {
+    body.mode = patch.mode;
+  }
   return apiRequest<ProjectDetail>(`/api/projects/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify(patch),
+    body: JSON.stringify(body),
   });
 }
 
 export function deleteProject(id: string): Promise<void> {
   return apiRequest<void>(`/api/projects/${id}`, { method: 'DELETE' });
+}
+
+export function startCrawl(projectId: string): Promise<CrawlRun> {
+  return apiRequest<CrawlRun>(`/api/projects/${projectId}/crawls`, { method: 'POST' });
+}
+
+export function listCrawls(projectId: string, signal?: AbortSignal): Promise<CrawlRun[]> {
+  return apiRequest<CrawlRun[]>(`/api/projects/${projectId}/crawls`, { signal });
+}
+
+export function getCrawl(projectId: string, runId: string, signal?: AbortSignal): Promise<CrawlRun> {
+  return apiRequest<CrawlRun>(`/api/projects/${projectId}/crawls/${runId}`, { signal });
+}
+
+export function getCrawlSummary(projectId: string, runId: string, signal?: AbortSignal): Promise<CrawlSummary> {
+  return apiRequest<CrawlSummary>(`/api/projects/${projectId}/crawls/${runId}/summary`, { signal });
+}
+
+export function listCrawlPages(
+  projectId: string,
+  runId: string,
+  params: { query?: string; status?: CrawlPageStatus },
+  signal?: AbortSignal,
+): Promise<CrawlPageSummary[]> {
+  const search = new URLSearchParams();
+  if (params.query) {
+    search.set('q', params.query);
+  }
+  if (params.status) {
+    search.set('status', params.status);
+  }
+  const suffix = search.size > 0 ? `?${search.toString()}` : '';
+  return apiRequest<CrawlPageSummary[]>(`/api/projects/${projectId}/crawls/${runId}/pages${suffix}`, { signal });
+}
+
+export function getCrawlPage(projectId: string, runId: string, pageId: string, signal?: AbortSignal): Promise<CrawlPageDetail> {
+  return apiRequest<CrawlPageDetail>(`/api/projects/${projectId}/crawls/${runId}/pages/${pageId}`, { signal });
+}
+
+export function cancelCrawl(projectId: string, runId: string): Promise<CrawlRun> {
+  return apiRequest<CrawlRun>(`/api/projects/${projectId}/crawls/${runId}/cancel`, { method: 'POST' });
+}
+
+export function getCrawlSettings(signal?: AbortSignal): Promise<CrawlSettings> {
+  return apiRequest<CrawlSettings>('/api/settings/crawl', { signal });
+}
+
+export function updateCrawlSettings(pageLimit: number): Promise<CrawlSettings> {
+  return apiRequest<CrawlSettings>('/api/settings/crawl', {
+    method: 'PATCH',
+    body: JSON.stringify({ pageLimit }),
+  });
 }
 
 export async function getHealth(signal?: AbortSignal): Promise<HealthReport> {

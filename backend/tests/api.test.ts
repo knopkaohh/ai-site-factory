@@ -49,6 +49,7 @@ describe('база и транзакции', () => {
     const created = createProject(database, {
       name: 'Мастерская',
       sourceDomain: 'workshop.example',
+      sourceUrl: 'https://workshop.example/',
       brief: 'Обновить каталог изделий.',
       requirements: null,
       mode: 'autopilot',
@@ -103,14 +104,15 @@ describe('HTTP API проектов', () => {
     return { status: response.status, body: text ? JSON.parse(text) : null };
   }
 
-  it('сообщает состояние сервера и не притворяется, что интеграции подключены', async () => {
+  it('сообщает состояние сервера и не помечает неподключённые интеграции как готовые', async () => {
     const { status, body } = await send('/api/health');
-    const data = (body as { data: { status: string; database: { status: string; location: string }; integrations: { state: string }[] } }).data;
+    const data = (body as { data: { status: string; database: { status: string; location: string }; integrations: { id: string; state: string }[] } }).data;
     assert.equal(status, 200);
     assert.equal(data.status, 'ok');
     assert.equal(data.database.status, 'ok');
     assert.equal(data.database.location, 'backend/data/app.db');
-    assert.ok(data.integrations.every((item) => item.state !== 'ok'));
+    assert.equal(data.integrations.find((item) => item.id === 'crawler')?.state, 'ok');
+    assert.ok(data.integrations.filter((item) => item.id !== 'crawler').every((item) => item.state !== 'ok'));
   });
 
   it('начинает с пустого списка и нулевых счётчиков', async () => {
@@ -131,6 +133,7 @@ describe('HTTP API проектов', () => {
     assert.equal(status, 201);
     assert.equal(detail.project.name, 'Кафе Север');
     assert.equal(detail.project.sourceDomain, 'cafe.example');
+    assert.equal(detail.project.sourceUrl, 'https://cafe.example/menu');
     assert.equal(detail.project.status, 'created');
     assert.equal(detail.project.currentStage, 'collect');
     assert.equal(detail.project.progress, 0);
@@ -217,6 +220,7 @@ describe('HTTP API проектов', () => {
     assert.equal(updated.status, 200);
     assert.equal(detail.project.name, 'Кафе Север 2');
     assert.equal(detail.project.sourceDomain, 'new.cafe.example');
+    assert.equal(detail.project.sourceUrl, 'http://new.cafe.example/path');
     assert.equal(detail.project.requirements, null);
     assert.equal(detail.project.mode, 'autopilot');
     assert.equal(detail.project.status, 'created');
@@ -230,7 +234,7 @@ describe('HTTP API проектов', () => {
     const listed = await send('/api/projects');
     const id = (listed.body as { data: ProjectList }).data.projects[0]?.id;
     assert.ok(id);
-    assert.throws(() => startStage(database, id, 'collect'), /не подключён/);
+    assert.throws(() => startStage(database, id, 'analyze'), /не подключён/);
     const loaded = await send(`/api/projects/${id}`);
     const detail = (loaded.body as { data: ProjectDetail }).data;
     assert.ok(detail.stages.every((stage) => stage.status === 'pending'));

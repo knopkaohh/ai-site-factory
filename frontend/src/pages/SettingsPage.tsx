@@ -1,13 +1,18 @@
 import { useEffect, useState } from 'react';
-import { ApiRequestError, getHealth } from '../api/client';
+import { ApiRequestError, getCrawlSettings, getHealth, updateCrawlSettings } from '../api/client';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { LoadingState } from '../components/LoadingState';
 import { PageHeader } from '../components/PageHeader';
 import { formatDateTime } from '../format';
-import { INTEGRATION_STATE_LABELS, type HealthReport } from '../shared';
+import { CRAWL_PAGE_LIMIT_MAX, CRAWL_PAGE_LIMIT_MIN, INTEGRATION_STATE_LABELS, type CrawlSettings, type HealthReport } from '../shared';
 
 export function SettingsPage() {
   const [health, setHealth] = useState<HealthReport | null>(null);
+  const [settings, setSettings] = useState<CrawlSettings | null>(null);
+  const [pageLimit, setPageLimit] = useState('100');
+  const [saving, setSaving] = useState(false);
+  const [settingsNotice, setSettingsNotice] = useState<string | null>(null);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -19,9 +24,11 @@ export function SettingsPage() {
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
-    getHealth(controller.signal)
-      .then((result) => {
-        setHealth(result);
+    Promise.all([getHealth(controller.signal), getCrawlSettings(controller.signal)])
+      .then(([healthResult, settingsResult]) => {
+        setHealth(healthResult);
+        setSettings(settingsResult);
+        setPageLimit(String(settingsResult.pageLimit));
         setError(null);
       })
       .catch((caught: unknown) => {
@@ -43,7 +50,7 @@ export function SettingsPage() {
     <>
       <PageHeader
         title="Настройки"
-        description="Состояние платформы и будущих интеграций. Подключёнными отмечены только реально настроенные компоненты."
+        description="Состояние платформы, лимит сбора и интеграции. Подключёнными отмечены только реально работающие компоненты."
       />
       {loading ? <LoadingState /> : null}
       {error ? <ErrorBanner message={error} onRetry={() => setReloadKey((value) => value + 1)} /> : null}
@@ -74,6 +81,70 @@ export function SettingsPage() {
                 </dd>
               </div>
             </dl>
+          </section>
+          <section className="panel stack">
+            <h2>Сбор исходного сайта</h2>
+            {settings ? (
+              <form
+                className="form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  setSaving(true);
+                  setSettingsError(null);
+                  setSettingsNotice(null);
+                  updateCrawlSettings(Number(pageLimit))
+                    .then((next) => {
+                      setSettings(next);
+                      setPageLimit(String(next.pageLimit));
+                      setSettingsNotice('Лимит страниц сохранён');
+                    })
+                    .catch((caught: unknown) => {
+                      setSettingsError(caught instanceof ApiRequestError ? caught.message : 'Не удалось сохранить лимит');
+                    })
+                    .finally(() => setSaving(false));
+                }}
+              >
+                <label className="field" htmlFor="page-limit">
+                  Страниц за один запуск
+                  <input
+                    id="page-limit"
+                    type="number"
+                    min={CRAWL_PAGE_LIMIT_MIN}
+                    max={CRAWL_PAGE_LIMIT_MAX}
+                    value={pageLimit}
+                    onChange={(event) => setPageLimit(event.target.value)}
+                  />
+                </label>
+                <dl className="facts">
+                  <div>
+                    <dt>Размер ответа</dt>
+                    <dd>до {Math.round(settings.maxResponseBytes / 1_000_000)} МБ</dd>
+                  </div>
+                  <div>
+                    <dt>Ожидание ответа</dt>
+                    <dd>{Math.round(settings.requestTimeoutMs / 1000)} с</dd>
+                  </div>
+                  <div>
+                    <dt>Время запуска</dt>
+                    <dd>{Math.round(settings.runTimeoutMs / 60000)} мин</dd>
+                  </div>
+                  <div>
+                    <dt>Изображения</dt>
+                    <dd>
+                      JPEG, PNG, GIF и WebP, до {settings.maxImagesPerPage} на страницу и{' '}
+                      {Math.round(settings.maxImageBytes / 1_000_000)} МБ
+                    </dd>
+                  </div>
+                </dl>
+                {settingsError ? <p className="field-error">{settingsError}</p> : null}
+                {settingsNotice ? <p className="notice">{settingsNotice}</p> : null}
+                <div className="form-actions">
+                  <button type="submit" className="button button-primary" disabled={saving}>
+                    {saving ? 'Сохранение…' : 'Сохранить лимит'}
+                  </button>
+                </div>
+              </form>
+            ) : null}
           </section>
           <section className="panel stack">
             <h2>Интеграции</h2>

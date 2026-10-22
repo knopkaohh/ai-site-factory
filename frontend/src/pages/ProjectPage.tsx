@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ApiRequestError, deleteProject, getProject, updateProject } from '../api/client';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { CrawlPanel } from '../components/CrawlPanel';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { EventList } from '../components/EventList';
 import { LoadingState } from '../components/LoadingState';
@@ -60,6 +61,19 @@ export function ProjectPage() {
       });
     return () => controller.abort();
   }, [projectId, reloadKey]);
+
+  const refreshProject = useCallback(() => {
+    getProject(projectId)
+      .then((result) => {
+        setDetail(result);
+        setError(null);
+      })
+      .catch((caught: unknown) => {
+        if (caught instanceof ApiRequestError) {
+          setError(caught.message);
+        }
+      });
+  }, [projectId]);
 
   async function handleSave(value: ProjectInput) {
     if (!detail) {
@@ -208,8 +222,8 @@ export function ProjectPage() {
             <div>
               <dt>Исходный сайт</dt>
               <dd>
-                <a href={`https://${project.sourceDomain}`} target="_blank" rel="noreferrer noopener">
-                  https://{project.sourceDomain}
+                <a href={project.sourceUrl} target="_blank" rel="noreferrer noopener">
+                  {project.sourceUrl}
                 </a>
               </dd>
             </div>
@@ -220,11 +234,13 @@ export function ProjectPage() {
           <h2>Этапы</h2>
           <StageList stages={stages} />
           <p className="note">
-            Автоматический запуск пока недоступен. Сервисы сбора, анализа, дизайна, разработки, тестирования и
-            публикации не подключены, поэтому этапы остаются в сохранённом статусе «Ожидает».
+            Сбор запускается отдельно и отмечает этап завершённым только после полного сохранения страниц.
+            Анализ, концепция, разработка, тестирование и публикация пока не подключены.
           </p>
         </section>
       </div>
+
+      <CrawlPanel projectId={project.id} sourceUrl={project.sourceUrl} onChanged={refreshProject} />
 
       <section className="panel stack history">
         <h2>История</h2>

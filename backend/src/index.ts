@@ -1,9 +1,11 @@
 import { createApp } from './app';
+import { recoverInterruptedCrawls } from './crawl/service';
 import { loadConfig } from './config';
 import { openDatabase } from './db/database';
 
 const config = loadConfig();
 const database = openDatabase(config.databasePath);
+recoverInterruptedCrawls(database);
 const app = createApp({
   database,
   version: config.version,

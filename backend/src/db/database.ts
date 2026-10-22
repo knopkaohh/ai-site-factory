@@ -3,7 +3,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { SCHEMA_SQL } from './schema';
 
-const MIGRATION_VERSION = 1;
+const MIGRATION_VERSION = 2;
 
 export function openDatabase(databasePath: string): DatabaseSync {
   if (databasePath !== ':memory:') {
@@ -20,6 +20,7 @@ export function migrate(database: DatabaseSync): void {
   if (Number(foreignKeys?.foreign_keys) !== 1) {
     throw new Error('SQLite foreign_keys не включены');
   }
+  ensureProjectSourceUrl(database);
   const existing = database
     .prepare('SELECT version FROM schema_migrations WHERE version = ?')
     .get(MIGRATION_VERSION);
@@ -28,6 +29,16 @@ export function migrate(database: DatabaseSync): void {
       .prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)')
       .run(MIGRATION_VERSION, new Date().toISOString());
   }
+}
+
+function ensureProjectSourceUrl(database: DatabaseSync): void {
+  const columns = database.prepare('PRAGMA table_info(projects)').all() as { name?: string }[];
+  if (!columns.some((column) => column.name === 'source_url')) {
+    database.exec('ALTER TABLE projects ADD COLUMN source_url TEXT');
+  }
+  database.exec(
+    "UPDATE projects SET source_url = 'https://' || source_domain || '/' WHERE source_url IS NULL OR trim(source_url) = ''",
+  );
 }
 
 export function withTransaction<T>(database: DatabaseSync, work: () => T): T {

@@ -1,11 +1,13 @@
 import {
+  CRAWL_PAGE_LIMIT_MAX,
+  CRAWL_PAGE_LIMIT_MIN,
   NAME_MAX_LENGTH,
   PROJECT_MODES,
   TEXT_MAX_LENGTH,
   isProjectMode,
   type ProjectMode,
 } from './constants';
-import { normalizeSourceDomain } from './domain';
+import { normalizeSourceTarget } from './domain';
 
 export interface FieldError {
   field: string;
@@ -15,6 +17,7 @@ export interface FieldError {
 export interface ProjectInput {
   name: string;
   sourceDomain: string;
+  sourceUrl: string;
   brief: string;
   requirements: string | null;
   mode: ProjectMode;
@@ -137,14 +140,16 @@ export function validateProjectInput(input: unknown): ValidationResult<ProjectIn
   const mode = readMode(input.mode, errors);
 
   let sourceDomain: string | undefined;
+  let sourceUrl: string | undefined;
   if (typeof input.sourceDomain !== 'string') {
     errors.push({ field: 'sourceDomain', message: 'Укажите домен исходного сайта' });
   } else {
-    const normalized = normalizeSourceDomain(input.sourceDomain);
+    const normalized = normalizeSourceTarget(input.sourceDomain);
     if (!normalized.ok) {
       errors.push({ field: 'sourceDomain', message: normalized.message });
     } else {
       sourceDomain = normalized.domain;
+      sourceUrl = normalized.sourceUrl;
     }
   }
 
@@ -153,6 +158,7 @@ export function validateProjectInput(input: unknown): ValidationResult<ProjectIn
     name === undefined ||
     brief === undefined ||
     sourceDomain === undefined ||
+    sourceUrl === undefined ||
     mode === undefined ||
     requirements === undefined
   ) {
@@ -161,7 +167,7 @@ export function validateProjectInput(input: unknown): ValidationResult<ProjectIn
 
   return {
     ok: true,
-    value: { name, sourceDomain, brief, requirements, mode },
+    value: { name, sourceDomain, sourceUrl, brief, requirements, mode },
   };
 }
 
@@ -214,11 +220,12 @@ export function validateProjectPatch(input: unknown): ValidationResult<ProjectPa
     if (typeof input.sourceDomain !== 'string') {
       errors.push({ field: 'sourceDomain', message: 'Укажите домен исходного сайта' });
     } else {
-      const normalized = normalizeSourceDomain(input.sourceDomain);
+      const normalized = normalizeSourceTarget(input.sourceDomain);
       if (!normalized.ok) {
         errors.push({ field: 'sourceDomain', message: normalized.message });
       } else {
         value.sourceDomain = normalized.domain;
+        value.sourceUrl = normalized.sourceUrl;
       }
     }
   }
@@ -230,3 +237,31 @@ export function validateProjectPatch(input: unknown): ValidationResult<ProjectPa
 }
 
 export const PROJECT_MODE_OPTIONS = PROJECT_MODES;
+
+export interface CrawlSettingsInput {
+  pageLimit: number;
+}
+
+export function validateCrawlSettingsPatch(input: unknown): ValidationResult<CrawlSettingsInput> {
+  if (!isPlainObject(input)) {
+    return { ok: false, errors: [{ field: 'form', message: 'Ожидался объект настроек сбора' }] };
+  }
+  const errors: FieldError[] = [];
+  for (const key of Object.keys(input)) {
+    if (key !== 'pageLimit') {
+      errors.push({ field: key, message: 'Это поле нельзя изменить' });
+    }
+  }
+  const raw = input.pageLimit;
+  const pageLimit = typeof raw === 'number' ? raw : typeof raw === 'string' && raw.trim() ? Number(raw) : Number.NaN;
+  if (!Number.isInteger(pageLimit) || pageLimit < CRAWL_PAGE_LIMIT_MIN || pageLimit > CRAWL_PAGE_LIMIT_MAX) {
+    errors.push({
+      field: 'pageLimit',
+      message: `Лимит страниц — целое число от ${CRAWL_PAGE_LIMIT_MIN} до ${CRAWL_PAGE_LIMIT_MAX}`,
+    });
+  }
+  if (errors.length > 0 || !Number.isInteger(pageLimit)) {
+    return { ok: false, errors };
+  }
+  return { ok: true, value: { pageLimit } };
+}
